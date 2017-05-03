@@ -66,6 +66,7 @@ size_t getDeviceMemory(void)
     struct cudaDeviceProp properties;
     int device;
 
+
     if (cudaGetDevice(&device) != cudaSuccess)
     {
         return 0;
@@ -128,11 +129,17 @@ void printCuType(const char *str, double A)
 #define BENCH_MATRIX_K              (128)
 #define BENCH_MATRIX_N              (128)
 
-#define CLEANUP()                           \
-    do {                                        \
+#define CPU() 					\
+    do {					\
         if (A) free (A);                        \
         if (B) free (B);                        \
         if (C) free (C);                        \
+	fflush(stdout);				\
+    } while (0)					
+
+
+#define CLEANUP()                           \
+    do {                                        \
         for(int i = 0; i < opts.N; ++i) {       \
             if(devPtrA[i]) cudaFree(devPtrA[i]);\
             if(devPtrB[i]) cudaFree(devPtrB[i]);\
@@ -368,8 +375,8 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 	cudaSetDevice(cpu_thread_id % num_gpus);        // "% num_gpus" allows more CPU threads than GPU devices
 	cudaGetDevice(&gpu_id);
 	
-
-	struct gemmTestParams<T_ELEM> params;
+	
+    struct gemmTestParams<T_ELEM> params;
     cudaStream_t *streamArray = 0;
     cublasStatus_t status1, status2, status3;
     T_ELEM *A = NULL;
@@ -388,7 +395,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
     int errors;
     double start, stop;
 
-    printf("Testing %cgemm\n", *opts.elem_type);
+    printf(" Testing %cgemm in GPU:%d \n", *opts.elem_type,gpu_id);
 
     matrixM = (opts.m) ? opts.m : BENCH_MATRIX_M;
     matrixN = (opts.n) ? opts.n : BENCH_MATRIX_N;
@@ -420,11 +427,11 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             (err3 != cudaSuccess))
         {
             CLEANUP();
-            fprintf(stderr, "!!!! GPU memory allocation error\n");
+            fprintf(stderr, "!!!! GPU%d memory allocation error\n",gpu_id);
  //           return CUBLASTEST_FAILED;
         }
     }
-
+    
     // For batched processing we need those arrays on the device
     if (opts.test_method == tmBatched)
     {
@@ -437,7 +444,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             (err3 != cudaSuccess))
         {
             CLEANUP();
-            fprintf(stderr, "!!!! GPU memory allocation error\n");
+            fprintf(stderr, "!!!! GPU%d memory allocation error\n",gpu_id);
        //     return CUBLASTEST_FAILED;
         }
 
@@ -450,7 +457,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             (err3 != cudaSuccess))
         {
             CLEANUP();
-            fprintf(stderr, "!!!! cannot copy pointer array to device\n");
+            fprintf(stderr, "!!!! GPU%d cannot copy pointer array to device\n",gpu_id);
 //            return CUBLASTEST_FAILED;
         }
     }
@@ -462,7 +469,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
     if ((!A) || (!B) || (!C))
     {
         CLEANUP();
-        fprintf(stderr, "!!!! system memory allocation error\n");
+        fprintf(stderr, "!!!! GPU%d system memory allocation error\n",gpu_id);
  //       return CUBLASTEST_FAILED;
     }
 
@@ -477,7 +484,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             if (cudaErr != cudaSuccess)
             {
                 CLEANUP();
-                fprintf(stderr, "!!!! cannot create stream\n");
+                fprintf(stderr, "GPU%d!!!! cannot create stream\n",gpu_id);
    //             return CUBLASTEST_FAILED;
             }
         }
@@ -509,7 +516,6 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             /* fill with SNaNs to make sure ZGEMM doesn't access C */
             memset(C, 0xFF, matrixSizeC * sizeof(C[0]));
         }
-
         double flopsCoef = 2.0;
 
         for (int i = 0; i < opts.N ; i++)
@@ -520,12 +526,14 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
             if ((status1 != CUBLAS_STATUS_SUCCESS) || (status2 != status1) || (status3 != status1))
             {
-                CLEANUP();
-                fprintf(stderr, "!!!! GPU access error (write)\n");
+          //      CLEANUP();
+                fprintf(stderr, "!!!! GPU%d access error (write)\n",gpu_id);
           //      return CUBLASTEST_FAILED;
             }
         }
-
+	cudaThreadSynchronize();
+	//cudaDeviceSynchronize();
+	printf("starting gpu%d\n",gpu_id);
         start = second();
 
         if (opts.test_method == tmBatched)
@@ -538,8 +546,8 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
             if (status1 != CUBLAS_STATUS_SUCCESS)
             {
                 cudaError_t cudaStatus = cudaGetLastError();
-                CLEANUP();
-                fprintf(stderr, "!!!! GPU program execution error : cublas Error=%d, cuda Error=%d,(%s)\n", status1, cudaStatus,cudaGetErrorString(cudaStatus));
+        //        CLEANUP();
+                fprintf(stderr, "!!!! GPU %d program execution error : cublas Error=%d, cuda Error=%d,(%s)\n",gpu_id, status1, cudaStatus,cudaGetErrorString(cudaStatus));
          //       return CUBLASTEST_FAILED;
             }
         }
@@ -555,8 +563,8 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
                 if (status1 != CUBLAS_STATUS_SUCCESS)
                 {
                     cudaError_t cudaStatus = cudaGetLastError();
-                    CLEANUP();
-                    fprintf(stderr, "!!!! GPU program execution error : cublas Error=%d, cuda Error=%d,(%s)\n", status1, cudaStatus,cudaGetErrorString(cudaStatus));
+      //              CLEANUP();
+                    fprintf(stderr, "!!!! GPU%d program execution error : cublas Error=%d, cuda Error=%d,(%s)\n",gpu_id, status1, cudaStatus,cudaGetErrorString(cudaStatus));
                //     return CUBLASTEST_FAILED;
                 }
             }
@@ -566,20 +574,22 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
         if (cudaStatus != cudaSuccess)
         {
-            CLEANUP();
-            fprintf(stderr, "!!!! GPU program execution error on cudaThreadSynchronize : cudaError=%d,(%s)\n", cudaStatus,cudaGetErrorString(cudaStatus));
+    //        CLEANUP();
+            fprintf(stderr, "!!!! GPU%d program execution error on cudaThreadSynchronize : cudaError=%d,(%s)\n",gpu_id, cudaStatus,cudaGetErrorString(cudaStatus));
         //    return CUBLASTEST_FAILED;
         }
 
         stop = second();
-
+    	//cudaDeviceSynchronize();
         fprintf(stdout, "^^^^GPU:%d elapsed = %10.8f sec  GFLOPS=%g\n",cpu_thread_id, (stop-start),
                 opts.N * (1e-9*flopsCoef*params.m*params.n*params.k)/(stop-start));
 
     } // end while (TESTGEN..
 
-    CLEANUP();
+    cudaThreadSynchronize();
+    cudaDeviceSynchronize();
     fprintf(stdout, "@@@@GPU:%d %cgemm test %s\n",cpu_thread_id, *opts.elem_type ,errors ? "FAIL" : "OK");
+    CLEANUP();
 }
     return CUBLASTEST_PASSED;
 }
