@@ -7,6 +7,8 @@ yo have to put batchCUBLAS.cpp to samples/7_CUDALibraries/batchCUBLAS/ DIR
 $vim samples/7_CUDALibraries/batchCUBLAS/Makefile
 
 Change the make file line151
+
+
 CFLAGS := 
 
 to 
