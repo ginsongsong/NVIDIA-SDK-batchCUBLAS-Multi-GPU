@@ -328,14 +328,14 @@ static int TESTGEN(gemm)(const struct gemmOpts *opts,
     params->k = k;
     params->alpha = theAlpha;
     params->beta = theBeta;
-
+    /*
     printf("#### args: ta=%d tb=%d m=%d n=%d k=%d ",
            (unsigned int)params->transa, (unsigned int)params->transb, params->m, params->n,
            params->k);
     printCuType(" alpha =", params->alpha);
     printCuType(" beta=",params->beta);
     printf("\n");
-
+	*/	
     m = cuRand() % matrixM;
     n = cuRand() % matrixN;
     k = cuRand() % matrixK;
@@ -401,7 +401,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
     int errors;
     double start, stop;
 
-    GPULOG << "Testing" << opts.elem_type<<"gmm... On GPU"<<gpu_id<<"\n";
+    GPULOG << "Testing " << opts.elem_type<<"gmm... On GPU"<<gpu_id<<"\n";
 
     matrixM = (opts.m) ? opts.m : BENCH_MATRIX_M;
     matrixN = (opts.n) ? opts.n : BENCH_MATRIX_N;
@@ -482,7 +482,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
     if ((!A) || (!B) || (!C))
     {
-        CLEANUP();
+        //CLEANUP();
        // fprintf(stderr, "!!!! system memory allocation error\n");
        // return CUBLASTEST_FAILED;
     }
@@ -497,7 +497,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
             if (cudaErr != cudaSuccess)
             {
-                CLEANUP();
+                //CLEANUP();
               //  fprintf(stderr, "!!!! cannot create stream\n");
               //  return CUBLASTEST_FAILED;
             }
@@ -513,7 +513,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
     while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
     {
-        GPULOG<< "#### args: lda="<<rowsA<<" ldb="<<rowsB<<" ldc="<<rowsB<<"\n";
+        //GPULOG<< "#### args: lda="<<rowsA<<" ldb="<<rowsB<<" ldc="<<rowsB<<"\n";
 
         // fillup with Nan first (so lda padding is full on Nan)
         memset(A, 0xFF, matrixSizeA* sizeof(A[0]));
@@ -541,12 +541,15 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 
             if ((status1 != CUBLAS_STATUS_SUCCESS) || (status2 != status1) || (status3 != status1))
             {
-                CLEANUP();
+               // CLEANUP();
                 //fprintf(stderr, "!!!! GPU access error (write)\n");
                 //return CUBLASTEST_FAILED;
             }
         }
-
+		///////////////////
+		#pragma omp barrier
+		cudaDeviceSynchronize();
+		
         start = second();
 		
 		
@@ -583,25 +586,25 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
                 if (status1 != CUBLAS_STATUS_SUCCESS)
                 {
                     cudaError_t cudaStatus = cudaGetLastError();
-                    CLEANUP();
+                    //CLEANUP();
                     //fprintf(stderr, "!!!! GPU program execution error : cublas Error=%d, cuda Error=%d,(%s)\n", status1, cudaStatus,cudaGetErrorString(cudaStatus));
                     //return CUBLASTEST_FAILED;
                 }
             }
         //}
 
-        cudaError_t cudaStatus = cudaThreadSynchronize();
+        cudaError_t cudaStatus = cudaDeviceSynchronize();
 
         if (cudaStatus != cudaSuccess)
         {
-            CLEANUP();
+            //CLEANUP();
             //fprintf(stderr, "!!!! GPU program execution error on cudaThreadSynchronize : cudaError=%d,(%s)\n", cudaStatus,cudaGetErrorString(cudaStatus));
             //return CUBLASTEST_FAILED;
         }
 
         stop = second();
 
-         GPULOG<< "^^^^ elapsed = "<<(stop-start)<<" sec  GFLOPS="<< opts.N * (1e-9*flopsCoef*params.m*params.n*params.k)/(stop-start) <<"\n";
+        GPULOG<< "^^^^ elapsed = "<<(stop-start)<<" sec  GFLOPS="<< opts.N * (1e-9*flopsCoef*params.m*params.n*params.k)/(stop-start) <<"\n";
                 
 
     } // end while (TESTGEN..
@@ -614,7 +617,7 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
  {	    
 
 
-		GPULOG<<"Testing hgemm \n"; 
+		GPULOG<<"Testing hgmm... On GPU"<<gpu_id<<"\n";
 		const __half alf = approx_float_to_half(1.0);
 		const __half bet = approx_float_to_half(0.0);
 		const __half *alpha = &alf;
@@ -626,10 +629,11 @@ int test_gemm_loop(struct gemmOpts &opts, float err, double max_relative_error, 
 		
 		//printf("In while hgemm \n"); 
 /////////////////////////////////START WHILE/////////////////////
+		errors = 0;
 		numTests=1;
 while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
     {
-        GPULOG<< "#### args: lda="<<rowsA<<" ldb="<<rowsB<<" ldc="<<rowsB<<"\n";
+       // GPULOG<< "#### args: lda="<<rowsA<<" ldb="<<rowsB<<" ldc="<<rowsB<<"\n";
 		
         // fillup with Nan first (so lda padding is full on Nan)
         memset(A, 0xFF, matrixSizeA* sizeof(A[0]));
@@ -658,7 +662,8 @@ while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
 			for( int j = 0; j < matrixSizeA ; j++)
 				dH_C[j] = approx_float_to_half(C[j]);
         }
-		
+		#pragma omp barrier
+		cudaDeviceSynchronize();
         start = second();
 
             for (int i = 0; i < opts.N ; i++)
@@ -674,14 +679,14 @@ while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
                 if (status1 != CUBLAS_STATUS_SUCCESS)
                 {
                     cudaError_t cudaStatus = cudaGetLastError();
-                    CLEANUP();
-                   // fprintf(stderr, "!!!! GPU program execution error : cublas Error=%d, cuda Error=%d,(%s)\n", status1, cudaStatus,cudaGetErrorString(cudaStatus));
+                   // CLEANUP();
+                   // GPULOG<<"!!!! GPU program execution error : cublas Error="<<status1<<", cuda Error="<<cudaStatus<<",("<<cudaGetErrorString(cudaStatus)<<")\n";
                    // return CUBLASTEST_FAILED;
                 }
             }
 
-
-        cudaThreadSynchronize();
+		cudaDeviceSynchronize();
+        //cudaThreadSynchronize();
 
       
         stop = second();
@@ -693,10 +698,15 @@ while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
 		GPULOG<< "@@@@ hgemm test "<<"OK\n";
     } // end while (TESTGEN..
 /////////////////////////////////END WHILE
+	cudaFree(dH_A);
+	cudaFree(dH_B);
+	cudaFree(dH_C);
 	
  }	//end of the hgmm
  
 ///////////////////
+	#pragma omp barrier
+	cudaDeviceSynchronize();
     CLEANUP();
 	cout <<GPULOG.str()<<endl;
 }//endof openmp
@@ -780,7 +790,7 @@ int main(int argc, char *argv[])
 
             case 0:
                 opts.test_method = tmStream;
-                fprintf(stdout, "\n ==== Running N-times=%d with streams ==== \n\n", opts.N);
+                //fprintf(stdout, "\n ==== Running N-times=%d with streams ==== \n\n", opts.N);
                 break;
 			/*
             case 2:
