@@ -685,11 +685,12 @@ while (TESTGEN(gemm)(&opts, matrixM, matrixN, matrixK, numTests, &params) == 0)
                 }
             }
 
-		cudaDeviceSynchronize();
-        //cudaThreadSynchronize();
+		
 
       
         stop = second();
+	cudaDeviceSynchronize();
+        //cudaThreadSynchronize();
 		GPULOG<< "^^^^ elapsed = "<<(stop-start)<<" sec  GFLOPS="<< opts.N * (1e-9*flopsCoef*params.m*params.n*params.k)/(stop-start) <<"\n";
         
 		if(errors)
