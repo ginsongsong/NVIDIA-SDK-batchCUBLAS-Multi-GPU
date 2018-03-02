@@ -5,7 +5,7 @@ echo "CPU freq list"
 cpupower frequency-info 
 echo "Set CPU freq"
 #3.6GHz
-for((x=0;x<36;x++))
+for((x=0;x<$(proc);x++))
 do
  echo  3600000 > /sys/devices/system/cpu/cpu${x}/cpufreq/scaling_min_freq
 done
